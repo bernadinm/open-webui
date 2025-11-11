@@ -57,7 +57,7 @@ from open_webui.env import (
 router = APIRouter()
 
 # Constants
-MAX_FILE_SIZE_MB = 20
+MAX_FILE_SIZE_MB = 100
 MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024  # Convert MB to bytes
 AZURE_MAX_FILE_SIZE_MB = 200
 AZURE_MAX_FILE_SIZE = AZURE_MAX_FILE_SIZE_MB * 1024 * 1024  # Convert MB to bytes

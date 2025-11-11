@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -21,6 +22,8 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from open_webui.models.models import Models
+from open_webui.models.files import Files
+from open_webui.storage.provider import Storage
 from open_webui.config import (
     CACHE_DIR,
 )
@@ -866,14 +869,67 @@ async def generate_chat_completion(
     if prefix_id:
         payload["model"] = payload["model"].replace(f"{prefix_id}.", "")
 
+    # Debug: Always log basic info to see if code is reached
+    log.info(f"🔍 CHAT COMPLETION DEBUG - Model ID: {model_id}")
+    log.info(f"🔍 CHAT COMPLETION DEBUG - Form data keys: {list(form_data.keys())}")
+    
     # Add user info to the payload if the model is a pipeline
-    if "pipeline" in model and model.get("pipeline"):
+    # Check if this is a pipeline request based on the model metadata
+    is_pipeline_request = model and "pipeline" in model
+    log.info(f"🔍 PIPELINE DEBUG - Model: {model_id}, is_pipeline: {is_pipeline_request}")
+    
+    if is_pipeline_request:
         payload["user"] = {
             "name": user.name,
             "id": user.id,
             "email": user.email,
             "role": user.role,
         }
+        
+        # Extract and attach files to pipeline requests
+        files_to_attach = []
+        
+        # Debug: Log message structure
+        log.info(f"🔍 FILE DEBUG - Checking {len(payload.get('messages', []))} messages for file references")
+        
+        for i, message in enumerate(payload.get("messages", [])):
+            content = message.get("content", "")
+            log.info(f"🔍 FILE DEBUG - Message {i}: type={type(content)}, content preview: {str(content)[:200]}...")
+            
+            # Look for file references in message content (multiple possible formats)
+            if isinstance(content, list):
+                for j, content_part in enumerate(content):
+                    log.info(f"🔍 FILE DEBUG - Content part {j}: {content_part}")
+                    if isinstance(content_part, dict):
+                        if content_part.get("type") == "file":
+                            file_id = content_part.get("file", {}).get("id")
+                            if file_id:
+                                log.info(f"🔍 FILE DEBUG - Found file ID: {file_id}")
+                                try:
+                                    file_record = Files.get_file_by_id(file_id)
+                                    if file_record:
+                                        # Get file from storage
+                                        file_path = Storage.get_file(file_record.path)
+                                        with open(file_path, "rb") as f:
+                                            file_bytes = f.read()
+                                            b64_data = base64.b64encode(file_bytes).decode('utf-8')
+                                            
+                                        files_to_attach.append({
+                                            "id": file_id,
+                                            "name": file_record.filename,
+                                            "type": file_record.meta.get("content_type", "application/octet-stream"),
+                                            "size": len(file_bytes),
+                                            "data": f"data:{file_record.meta.get('content_type', 'application/octet-stream')};base64,{b64_data}"
+                                        })
+                                        log.info(f"✅ FILE DEBUG - Successfully attached file: {file_record.filename}")
+                                except Exception as e:
+                                    log.warning(f"Failed to attach file {file_id}: {e}")
+        
+        if files_to_attach:
+            payload["files"] = files_to_attach
+            log.info(f"✅ FILE DEBUG - Added {len(files_to_attach)} files to payload")
+        else:
+            log.info("🔍 FILE DEBUG - No files found to attach")
 
     url = request.app.state.config.OPENAI_API_BASE_URLS[idx]
     key = request.app.state.config.OPENAI_API_KEYS[idx]
