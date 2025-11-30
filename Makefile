@@ -43,6 +43,10 @@ startAndBuild:
 stop:
 	$(DOCKER_COMPOSE) stop
 
+restart:
+	$(DOCKER_COMPOSE) down
+	$(DOCKER_COMPOSE) up -d
+
 logs:
 	$(DOCKER_COMPOSE) logs -f
 
@@ -57,3 +61,20 @@ update:
 	$(DOCKER_COMPOSE) up --build -d
 	$(DOCKER_COMPOSE) start
 
+status:
+	@echo "Checking container status..."
+	@$(DOCKER_COMPOSE) ps
+
+help:
+	@echo "Available commands:"
+	@echo "  make install        - Install and start all services"
+	@echo "  make start          - Start existing containers"
+	@echo "  make stop           - Stop running containers"
+	@echo "  make restart        - Restart containers (picks up config changes)"
+	@echo "  make logs           - Show and follow container logs"
+	@echo "  make status         - Show container status"
+	@echo "  make update         - Update Ollama models and rebuild"
+	@echo "  make remove         - Remove all containers and data"
+	@echo "  make help           - Show this help message"
+
+.PHONY: install remove start startAndBuild stop restart logs update status help
